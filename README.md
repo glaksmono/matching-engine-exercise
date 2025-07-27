@@ -86,8 +86,27 @@ Expected output
 }
 ```
 
-O-3 is a MARKET sell → hits best BID O-1 at 65 000.
-O-2 is later cancelled, leaving only the partial O-1 in the book.
+<!-- 📖 Sample execution walk-through -->
+
+> ### What happens in the example above?
+>
+> 1. **`O-3` – MARKET SELL 0.2 BTC**  
+>    * Because it is a *market* order, it crosses the book and takes the best bid.  
+>    * Best bid at that moment = **`O-1` BUY LIMIT 65 000 USDT**.  
+>    * A trade prints at **65 000 USDT** for **0.2 BTC**.
+>
+> 2. **`O-1` after the fill**  
+>    * Started with **0.5 BTC**.  
+>    * **0.2 BTC** was executed.  
+>    * **0.3 BTC** remains resting on the bid side of the book.
+>
+> 3. **`O-2` – SELL LIMIT 65 500 USDT**  
+>    * Still resting when `CANCEL O-2` arrives.  
+>    * It is removed, so it never appears in the final order-book snapshot.
+>
+> **Result**  
+> * `trades` array shows a single execution (`O-1` ↔ `O-3`).  
+> * Final `orderBook` holds one bid (`O-1`, 0.3 BTC @ 65 000) and **no asks**.
 
 ⸻
 
@@ -109,27 +128,30 @@ O-2 is later cancelled, leaving only the partial O-1 in the book.
 
 ⸻
 
-5. Submission checklist
-	1.	Fork this repo.
-	2.	Create a feature branch your-name/matching-engine.
-	3.	Commit your solution (code, tests, docs).
-	4.	Open a Pull Request to main with:
-	•	A one-paragraph design rationale.
-	•	Link to any AI prompts or tools you used (transparency ≠ penalty).
-	•	How to run tests & benchmarks (30 s smoke test is enough).
-	5.	Keep the PR self-contained—CI should pass with a clean clone.
+## 5. Submission checklist
+
+1. **Fork** this repo.  
+2. Create a **feature branch** `your-name/matching-engine`.  
+3. Commit your solution (code, tests, docs).  
+4. Open a **Pull Request** to `main` that includes:  
+   * A one-paragraph design rationale (why you built it this way).  
+   * Links or citations to any AI prompts/tools you used (transparency ≠ penalty).  
+   * Clear instructions to run tests & a ≤ 30 s smoke benchmark.  
+5. Keep the PR self-contained—CI should pass from a clean clone.
 
 ⸻
 
-6. What not to worry about
-	•	GUI, REST API, persistence layer, auth.
-	•	Perfect performance tuning—clarity beats micro-optimisations here.
-	•	Edge-case regulations (lot sizes, funding rates, etc.)—this is a demo.
+## 6. What *not* to worry about
+
+* **GUI, REST API, persistence layer, auth** – focus only on the core matching logic.  
+* **Perfect performance tuning** – clarity beats micro-optimisations for this demo.  
+* **Edge-case regulations** (lot sizes, funding rates, etc.) – assume a simplified environment.
 
 ⸻
 
-7. Need help?
+## 7. Need help?
 
-If something is unclear, open an Issue in the repo—concise questions only, please.
+If anything is unclear, open an **Issue** in this repository—concise questions only, please.
+
 Good luck, and have fun!
 
