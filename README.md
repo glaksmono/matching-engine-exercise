@@ -52,6 +52,7 @@ Run your engine from the project root:
 
 ```bash
 ./engine path/to/orders.json
+```
 
 	•	Input – a JSON array of commands.
 	•	Output – two JSON arrays printed to stdout:
@@ -60,15 +61,18 @@ Run your engine from the project root:
 
 Sample input (orders.json)
 
+```json
 [
   {"cmd":"NEW","id":"O-1","side":"BUY","type":"LIMIT","price":65000,"qty":0.5},
   {"cmd":"NEW","id":"O-2","side":"SELL","type":"LIMIT","price":65500,"qty":0.3},
   {"cmd":"NEW","id":"O-3","side":"SELL","type":"MARKET","qty":0.2},
   {"cmd":"CANCEL","id":"O-2"}
 ]
+```
 
 Expected output
 
+```json
 {
   "trades": [
     {"buyId":"O-1","sellId":"O-3","price":65000,"qty":0.2,"execId":1}
@@ -80,20 +84,27 @@ Expected output
     "asks": []
   }
 }
+```
 
 O-3 is a MARKET sell → hits best BID O-1 at 65 000.
 O-2 is later cancelled, leaving only the partial O-1 in the book.
 
 ⸻
 
-4. Non-functional expectations
+## 4. Non-functional expectations
 
-Area	Minimal bar
-Language	Anything with a mainstream compiler / interpreter & open licence.
-Build	1-line setup (make, npm install, etc.).
-Tests	Unit tests covering happy path + edge cases.
-Security	No obvious injection / overflow / race conditions.
-Scalability note	Add a short ARCHITECTURE.md describing how you’d evolve this into HA, low-latency production service (sharding, persistence, etc.). A diagram is nice but optional.
+| Area            | Minimal bar                                                                                                                         |
+|-----------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| **Language**    | Any mainstream language with an open-source compiler/interpreter. Idiomatic style and consistent formatting expected.               |
+| **Build**       | One-liner bootstrap (`make`, `npm ci`, `go run`, etc.). The repo must clone, build, and run on a clean machine without manual tweaks.|
+| **Tests**       | Automated unit tests for happy paths *and* edge cases. Aim for ≥ 80 % line coverage or equivalent meaningful metric.                |
+| **Security**    | No obvious injections, overflows, race conditions, or hard-coded secrets. Follow the language’s standard secure-coding guidelines.  |
+| **Performance** | Big-O analysis documented in code comments. The engine must process 10 k orders < 1 s on a laptop-class machine (non-debug build).   |
+| **Scalability** | Include an `ARCHITECTURE.md` explaining how you would evolve this into a highly available, low-latency service (sharding, HA, etc.).|
+| **Observability**| Basic logging + one metrics hook (e.g., order-match latency histogram).                                                            |
+| **Docs**        | Clear `README` usage instructions and inline code comments.                                                                         |
+
+> **Tip:** Keep the implementation tiny. Demonstrate discipline with tests, security hygiene, and a short scalability note rather than over-engineering
 
 
 ⸻
