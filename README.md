@@ -54,10 +54,11 @@ Run your engine from the project root:
 ./engine path/to/orders.json
 ```
 
-	•	Input – a JSON array of commands.
-	•	Output – two JSON arrays printed to stdout:
-	1.	trades – every execution in the order it happened.
-	2.	orderBook – final resting state (best BID ↔ best ASK).
+* **Input** – a **JSON array** of commands.
+
+* **Output** – printed to **stdout** as a **JSON object** containing:  
+  1. **`trades`** – every execution in the order it happened.  
+  2. **`orderBook`** – final resting state (best **BID** ↔ best **ASK**).
 
 Sample input (orders.json)
 
