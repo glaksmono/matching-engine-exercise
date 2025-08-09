@@ -1,10 +1,10 @@
 package main
 
 import (
+	"container/heap"
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
 
 	"github.com/shopspring/decimal"
 )
@@ -22,16 +22,6 @@ const (
 	OrderTypeMarket = "MARKET"
 )
 
-type OrderJSON struct {
-	Cmd    string  `json:"cmd"`
-	ID     string  `json:"id"`
-	Side   *string `json:"side"`
-	Type   *string `json:"type"`
-	Price  int     `json:"price"`
-	Qty    float64 `json:"qty"`
-	Status int     `json:"-"`
-}
-
 type Order struct {
 	Cmd        string          `json:"cmd"`
 	ID         string          `json:"id"`
@@ -40,7 +30,16 @@ type Order struct {
 	Price      int             `json:"price"`
 	Qty        decimal.Decimal `json:"qty"`
 	InitialQty decimal.Decimal `json:"-"`
+	SequenceID int             `json:"-"`
 	Canceled   bool            `json:"-"`
+}
+
+func (o Order) IsMarketType() bool {
+	return *o.Type == OrderTypeMarket
+}
+
+func (o Order) IsLimitType() bool {
+	return *o.Type == OrderTypeLimit
 }
 
 type Trade struct {
@@ -52,9 +51,9 @@ type Trade struct {
 }
 
 type OrderBookData struct {
-	ID    string          `json:"id"`
-	Price int             `json:"price"`
-	Qty   decimal.Decimal `json:"qty"`
+	ID    string  `json:"id"`
+	Price int     `json:"price"`
+	Qty   float64 `json:"qty"`
 }
 
 type OrderBook struct {
@@ -62,8 +61,72 @@ type OrderBook struct {
 	Asks []OrderBookData `json:"asks"`
 }
 
-var waitingBuyOrders []Order
-var waitingSellOrders []Order
+type BuyOrders []*Order
+
+func (h BuyOrders) Len() int { return len(h) }
+func (h BuyOrders) Less(i, j int) bool {
+	if h[i].Price > h[j].Price {
+		return true
+	}
+
+	if h[i].Price == h[j].Price {
+		return h[i].SequenceID < h[j].SequenceID
+	}
+
+	return false
+}
+
+func (h BuyOrders) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
+func (h *BuyOrders) Push(x interface{}) { *h = append(*h, x.(*Order)) }
+func (h BuyOrders) GetByIndex(i int) *Order {
+	return h[i]
+}
+func (h *BuyOrders) Pop() interface{} {
+	oldOrder := *h
+	lenOrder := len(oldOrder)
+	order := oldOrder[lenOrder-1]
+	*h = oldOrder[0 : lenOrder-1]
+
+	return order
+}
+
+type SellOrders []*Order
+
+func (h SellOrders) Len() int { return len(h) }
+func (h SellOrders) Less(i, j int) bool {
+	if h[i].Price < h[j].Price {
+		return true
+	}
+
+	if h[i].Price == h[j].Price {
+		return h[i].SequenceID < h[j].SequenceID
+	}
+
+	return false
+}
+
+func (h SellOrders) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h SellOrders) GetByIndex(i int) *Order {
+	return h[i]
+}
+
+func (h *SellOrders) Push(x interface{}) {
+	*h = append(*h, x.(*Order))
+}
+
+func (h *SellOrders) Pop() interface{} {
+	oldOrder := *h
+	lenOrder := len(oldOrder)
+	order := oldOrder[lenOrder-1]
+	*h = oldOrder[0 : lenOrder-1]
+
+	return order
+}
+
+var buyOrders = &BuyOrders{}
+var sellOrders = &SellOrders{}
+var orderMap = make(map[string]*Order)
+var sequenceCounter int = 0
 
 var trades []Trade
 
@@ -78,6 +141,9 @@ func main() {
 	if err != nil {
 		fmt.Printf("error loading JSON from file %s: %v\n", file, err)
 	}
+
+	heap.Init(buyOrders)
+	heap.Init(sellOrders)
 
 	for _, order := range orders {
 		switch order.Cmd {
@@ -94,21 +160,26 @@ func main() {
 		Bids: []OrderBookData{},
 		Asks: []OrderBookData{},
 	}
-	for _, o := range waitingBuyOrders {
+	for buyOrders.Len() > 0 {
+		o := heap.Pop(buyOrders).(*Order)
 		if o.Qty.Sign() > 0 && !o.Canceled {
+
+			qty, _ := o.Qty.Float64()
 			orderBook.Bids = append(orderBook.Bids, OrderBookData{
 				ID:    o.ID,
 				Price: o.Price,
-				Qty:   o.Qty,
+				Qty:   qty,
 			})
 		}
 	}
-	for _, o := range waitingSellOrders {
+	for sellOrders.Len() > 0 {
+		o := heap.Pop(sellOrders).(*Order)
 		if o.Qty.Sign() > 0 && !o.Canceled {
+			qty, _ := o.Qty.Float64()
 			orderBook.Asks = append(orderBook.Asks, OrderBookData{
 				ID:    o.ID,
 				Price: o.Price,
-				Qty:   o.Qty,
+				Qty:   qty,
 			})
 		}
 	}
@@ -132,8 +203,9 @@ func main() {
 }
 
 func commandNew(order *Order) {
-	// Initial quantity before order execution
+	sequenceCounter++
 	order.InitialQty = order.Qty.Copy()
+	order.SequenceID = sequenceCounter
 
 	switch *order.Side {
 	case OrderSideBuy:
@@ -147,157 +219,126 @@ func commandNew(order *Order) {
 }
 
 func commandCancel(order *Order) {
-		for idx := range waitingSellOrders {
-			if waitingSellOrders[idx].ID == order.ID && waitingSellOrders[idx].Qty != decimal.Zero && !waitingSellOrders[idx].Canceled {
-				waitingSellOrders[idx].Canceled = true
-				return
-			}
-		}
+	o, _ := orderMap[order.ID]
+	if o == nil {
+		return
+	}
+	o.Canceled = true
 
-		for idx := range waitingBuyOrders{
-			if waitingBuyOrders[idx].ID == order.ID && waitingBuyOrders[idx].Qty != decimal.Zero && !waitingBuyOrders[idx].Canceled {
+	// for idx := range waitingSellOrders {
+	// 	if waitingSellOrders[idx].ID == order.ID && waitingSellOrders[idx].Qty != decimal.Zero && !waitingSellOrders[idx].Canceled {
+	// 		waitingSellOrders[idx].Canceled = true
+	// 		return
+	// 	}
+	// }
 
-				waitingBuyOrders[idx].Canceled = true
-				return
-			}
-		}
+	// for idx := range waitingBuyOrders {
+	// 	if waitingBuyOrders[idx].ID == order.ID && waitingBuyOrders[idx].Qty != decimal.Zero && !waitingBuyOrders[idx].Canceled {
+	//
+	// 		waitingBuyOrders[idx].Canceled = true
+	// 		return
+	// 	}
+	// }
 }
 
 func orderBuy(order *Order) {
 	reqQty := order.Qty
 
-	sortWaitingOrderSell()
+	for sellOrders.Len() > 0 && reqQty.Cmp(decimal.Zero) > 0 {
+		sellOrder := sellOrders.GetByIndex(0)
 
-	deletedOrders := 0
-
-	for index := range waitingSellOrders {
-		idx := index - deletedOrders
-
-		if waitingSellOrders[idx].Qty.Sign() == 0 || waitingSellOrders[idx].Canceled {
+		if sellOrder.Canceled {
+			heap.Pop(sellOrders)
 			continue
 		}
 
-		canMatch := false
-
-		if *order.Type == OrderTypeMarket {
-			canMatch = true
-		} else if waitingSellOrders[idx].Price <= order.Price {
-			canMatch = true
-		}
+		canMatch := order.IsMarketType() || sellOrder.Price <= order.Price
 
 		if !canMatch {
-			continue
+			break
 		}
 
 		var qty decimal.Decimal
-		if waitingSellOrders[idx].Qty.Cmp(reqQty) > 0 {
+		if sellOrder.Qty.Cmp(reqQty) > 0 {
 			qty = reqQty
-			waitingSellOrders[idx].Qty = waitingSellOrders[idx].Qty.Sub(reqQty)
+			sellOrder.Qty = sellOrder.Qty.Sub(reqQty)
 		} else {
-			qty = waitingSellOrders[idx].Qty
-			waitingSellOrders[idx].Qty = decimal.Zero
+			qty = sellOrder.Qty
+			sellOrder.Qty = decimal.Zero
+
+			heap.Pop(sellOrders)
+			delete(orderMap, sellOrder.ID)
 		}
 
-		reqQty = reqQty.Sub(qty)
+		reqQty.Sub(qty)
 
 		if qty.Sign() > 0 {
 			trades = append(trades, Trade{
 				BuyID:  order.ID,
-				SellID: waitingSellOrders[idx].ID,
-				Price:  waitingSellOrders[idx].Price,
+				SellID: sellOrder.ID,
+				Price:  sellOrder.Price,
 				Qty:    qty,
 				Exec:   int64(len(trades) + 1),
 			})
-
-			if waitingSellOrders[idx].Qty == decimal.Zero {
-				waitingSellOrders = deleteByIndex(waitingSellOrders, idx)
-				deletedOrders++
-			}
-		}
-
-		if reqQty.Sign() == 0 {
-			break
 		}
 	}
 
-	if reqQty.Sign() > 0 && *order.Type == OrderTypeLimit {
+	if reqQty.Sign() > 0 && order.IsLimitType() {
 		order.Qty = reqQty
-		waitingBuyOrders = append(waitingBuyOrders, *order)
+		orderMap[order.ID] = order
+		heap.Push(buyOrders, order)
 	}
 }
 
 func orderSell(order *Order) {
 	reqQty := order.Qty
 
-	sortWaitingOrderBuy()
-	deletedOrders := 0 
+	for buyOrders.Len() > 0 && reqQty.Cmp(decimal.Zero) > 0 {
+		bestOrder := buyOrders.GetByIndex(0)
 
-	for index := range waitingBuyOrders {
-		idx := index - deletedOrders
-
-		if waitingBuyOrders[idx].Qty.Sign() == 0 || waitingBuyOrders[idx].Canceled {
+		if bestOrder.Canceled {
+			heap.Pop(buyOrders)
 			continue
 		}
 
-		canMatch := false
-
-		if *order.Type == OrderTypeMarket {
-			canMatch = true
-		} else if waitingBuyOrders[idx].Price >= order.Price {
-			canMatch = true
-		}
+		canMatch := order.IsMarketType() || bestOrder.Price >= order.Price
 
 		if !canMatch {
-			continue
+			break
 		}
 
 		var qty decimal.Decimal
-		if waitingBuyOrders[idx].Qty.Cmp(reqQty) > 0 {
+		if bestOrder.Qty.Cmp(reqQty) > 0 {
 			qty = reqQty
-			waitingBuyOrders[idx].Qty = waitingBuyOrders[idx].Qty.Sub(reqQty)
+			bestOrder.Qty = bestOrder.Qty.Sub(reqQty)
 		} else {
-			qty = waitingBuyOrders[idx].Qty
-			waitingBuyOrders[idx].Qty = decimal.Zero
+			qty = bestOrder.Qty
+			bestOrder.Qty = decimal.Zero
+
+			heap.Pop(buyOrders)
+			delete(orderMap, bestOrder.ID)
 		}
 
 		reqQty = reqQty.Sub(qty)
 
+		reqQty.Sub(qty)
+
 		if qty.Sign() > 0 {
 			trades = append(trades, Trade{
-				BuyID:  waitingBuyOrders[idx].ID,
+				BuyID:  bestOrder.ID,
 				SellID: order.ID,
-				Price:  waitingBuyOrders[idx].Price,
+				Price:  bestOrder.Price,
 				Qty:    qty,
 				Exec:   int64(len(trades) + 1),
 			})
-
-			if waitingBuyOrders[idx].Qty == decimal.Zero {
-				waitingBuyOrders = deleteByIndex(waitingBuyOrders, idx)
-				deletedOrders++
-			}
-		}
-
-		if reqQty.Sign() == 0 {
-			break
 		}
 	}
 
-	if reqQty.Sign() > 0  && *order.Type == OrderTypeLimit {
+	if reqQty.Sign() > 0 && *order.Type == OrderTypeLimit {
 		order.Qty = reqQty
-		waitingSellOrders = append(waitingSellOrders, *order)
+		orderMap[order.ID] = order
+		heap.Push(sellOrders, order)
 	}
-}
-
-func sortWaitingOrderBuy() {
-	sort.Slice(waitingBuyOrders, func(i, j int) bool {
-		return waitingBuyOrders[i].Price > waitingBuyOrders[j].Price && !waitingBuyOrders[i].Canceled
-	})
-}
-
-func sortWaitingOrderSell() {
-	sort.Slice(waitingSellOrders, func(i, j int) bool {
-		return waitingSellOrders[i].Price < waitingSellOrders[j].Price && !waitingSellOrders[i].Canceled
-	})
 }
 
 func loadJSON(filePath string) ([]Order, error) {
@@ -320,14 +361,4 @@ func loadJSON(filePath string) ([]Order, error) {
 	}
 
 	return dataTradeJSON, nil
-}
-
-func deleteByIndex(orders []Order,idx int) []Order {
-	if idx == len(orders) {
-		orders = orders[:idx]
-	}else {
-		orders = append(orders[:idx], orders[idx+1:]...)
-	}
-
-	return orders
 }
