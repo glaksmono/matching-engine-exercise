@@ -1,0 +1,18 @@
+{
+ "trades": [],
+ "orderBook": {
+  "bids": [],
+  "asks": [
+   {
+    "id": "S2",
+    "price": 100,
+    "qty": "5"
+   },
+   {
+    "id": "S1",
+    "price": 101,
+    "qty": "10"
+   }
+  ]
+ }
+}

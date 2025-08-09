@@ -1,0 +1,15 @@
+{
+ "trades": [
+  {
+   "buyId": "B1",
+   "sellId": "S1",
+   "price": 100,
+   "qty": "10",
+   "execId": 1
+  }
+ ],
+ "orderBook": {
+  "bids": [],
+  "asks": []
+ }
+}

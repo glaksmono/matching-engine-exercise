@@ -1,0 +1,6 @@
+[
+  {"cmd":"NEW", "id":"B1", "side":"BUY", "type":"LIMIT", "price":60000, "qty":"1.5"},
+  {"cmd":"NEW", "id":"S1", "side":"SELL", "type":"LIMIT", "price":60001, "qty":"0.5"},
+  {"cmd":"CANCEL", "id":"B2"},
+  {"cmd":"NEW", "id":"S2", "side":"SELL", "type":"MARKET", "qty":"1.0"}
+]

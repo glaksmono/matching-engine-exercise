@@ -51,9 +51,9 @@ type Trade struct {
 }
 
 type OrderBookData struct {
-	ID    string  `json:"id"`
-	Price int     `json:"price"`
-	Qty   float64 `json:"qty"`
+	ID    string          `json:"id"`
+	Price int             `json:"price"`
+	Qty   decimal.Decimal `json:"qty"`
 }
 
 type OrderBook struct {
@@ -128,7 +128,7 @@ var sellOrders = &SellOrders{}
 var orderMap = make(map[string]*Order)
 var sequenceCounter int = 0
 
-var trades []Trade
+var trades = make([]Trade, 0)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -141,6 +141,9 @@ func main() {
 	if err != nil {
 		fmt.Printf("error loading JSON from file %s: %v\n", file, err)
 	}
+
+
+	trades = []Trade{}
 
 	heap.Init(buyOrders)
 	heap.Init(sellOrders)
@@ -164,22 +167,20 @@ func main() {
 		o := heap.Pop(buyOrders).(*Order)
 		if o.Qty.Sign() > 0 && !o.Canceled {
 
-			qty, _ := o.Qty.Float64()
-			orderBook.Bids = append(orderBook.Bids, OrderBookData{
+						orderBook.Bids = append(orderBook.Bids, OrderBookData{
 				ID:    o.ID,
 				Price: o.Price,
-				Qty:   qty,
+				Qty:   o.Qty,
 			})
 		}
 	}
 	for sellOrders.Len() > 0 {
 		o := heap.Pop(sellOrders).(*Order)
 		if o.Qty.Sign() > 0 && !o.Canceled {
-			qty, _ := o.Qty.Float64()
 			orderBook.Asks = append(orderBook.Asks, OrderBookData{
 				ID:    o.ID,
 				Price: o.Price,
-				Qty:   qty,
+				Qty:   o.Qty,
 			})
 		}
 	}
@@ -270,7 +271,7 @@ func orderBuy(order *Order) {
 			delete(orderMap, sellOrder.ID)
 		}
 
-		reqQty.Sub(qty)
+				reqQty = reqQty.Sub(qty)
 
 		if qty.Sign() > 0 {
 			trades = append(trades, Trade{
@@ -319,9 +320,7 @@ func orderSell(order *Order) {
 			delete(orderMap, bestOrder.ID)
 		}
 
-		reqQty = reqQty.Sub(qty)
-
-		reqQty.Sub(qty)
+				reqQty = reqQty.Sub(qty)
 
 		if qty.Sign() > 0 {
 			trades = append(trades, Trade{

@@ -1,0 +1,65 @@
+{
+ "trades": [
+  {
+   "buyId": "B2",
+   "sellId": "S2",
+   "price": 50001,
+   "qty": "0.1",
+   "execId": 1
+  },
+  {
+   "buyId": "B2",
+   "sellId": "S4",
+   "price": 50001,
+   "qty": "0.1",
+   "execId": 2
+  },
+  {
+   "buyId": "B3",
+   "sellId": "S4",
+   "price": 50001,
+   "qty": "0.000000123",
+   "execId": 3
+  },
+  {
+   "buyId": "B1",
+   "sellId": "S4",
+   "price": 50000,
+   "qty": "0.499999877",
+   "execId": 4
+  },
+  {
+   "buyId": "B5",
+   "sellId": "S1",
+   "price": 50002,
+   "qty": "0.1",
+   "execId": 5
+  }
+ ],
+ "orderBook": {
+  "bids": [
+   {
+    "id": "B1",
+    "price": 50000,
+    "qty": "0.000000123"
+   },
+   {
+    "id": "B4",
+    "price": 49999,
+    "qty": "2"
+   }
+  ],
+  "asks": [
+   {
+    "id": "S3",
+    "price": 50003,
+    "qty": "0.3"
+   },
+   {
+    "id": "S5",
+    "price": 50004,
+    "qty": "0.000000001"
+   }
+  ]
+ }
+}

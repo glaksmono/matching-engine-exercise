@@ -1,0 +1,18 @@
+[
+  {
+    "cmd": "NEW",
+    "id": "B1",
+    "side": "BUY",
+    "type": "LIMIT",
+    "price": 99,
+    "qty": 10
+  },
+  {
+    "cmd": "NEW",
+    "id": "S1",
+    "side": "SELL",
+    "type": "LIMIT",
+    "price": 101,
+    "qty": 10
+  }
+]
