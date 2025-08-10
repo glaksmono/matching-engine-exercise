@@ -13,10 +13,11 @@ const (
 	OrderStatusWaiting = 0
 	OrderStatusSuccess = 1
 
-	OrderSideBuy       = "BUY"
-	OrderSideSell      = "SELL"
-	OrderCommandNew    = "NEW"
-	OrderCommandCancel = "CANCEL"
+	OrderSideBuy        = "BUY"
+	OrderSideSell       = "SELL"
+	OrderCommandNew     = "NEW"
+	OrderCommandCancel  = "CANCEL"
+	OrderCommandReplace = "REPLACE"
 
 	OrderTypeLimit  = "LIMIT"
 	OrderTypeMarket = "MARKET"
@@ -29,7 +30,6 @@ type Order struct {
 	Type       string          `json:"type"`
 	Price      int             `json:"price"`
 	Qty        decimal.Decimal `json:"qty"`
-	InitialQty decimal.Decimal `json:"-"`
 	SequenceID int             `json:"-"`
 	Canceled   bool            `json:"-"`
 }
@@ -47,7 +47,7 @@ type Trade struct {
 	SellID string          `json:"sellId"`
 	Price  int             `json:"price"`
 	Qty    decimal.Decimal `json:"qty"`
-	Exec   uint64           `json:"execId"`
+	Exec   uint64          `json:"execId"`
 }
 
 type OrderBookData struct {
@@ -170,6 +170,8 @@ func main() {
 			engine.commandNew(&order)
 		case OrderCommandCancel:
 			engine.commandCancel(&order)
+		case OrderCommandReplace:
+			engine.commandReplace(&order)
 		default:
 			fmt.Printf("Unknown command: %s\n", order.Cmd)
 		}
@@ -190,7 +192,6 @@ func main() {
 
 func (me *MatchingEngine) commandNew(order *Order) {
 	me.sequence++
-	order.InitialQty = order.Qty.Copy()
 	order.SequenceID = me.sequence
 
 	switch order.Side {
@@ -211,6 +212,30 @@ func (me *MatchingEngine) commandCancel(order *Order) {
 	}
 
 	o.Canceled = true
+}
+
+func (me *MatchingEngine) commandReplace(order *Order) {
+	o, isExist := me.orderMap[order.ID]
+	if !isExist {
+		return
+	}
+
+	me.sequence++
+
+	o.Price = order.Price
+	o.Qty = order.Qty
+
+	me.orderMap[o.ID] = o
+	if o.Side == OrderSideBuy {
+		buyOrder := heap.Pop(me.buyOrders).(*Order)
+		heap.Push(me.buyOrders, buyOrder)
+	}
+
+	if o.Side == OrderSideSell {
+		sellOrder := heap.Pop(me.sellOrders).(*Order)
+
+		heap.Push(me.sellOrders, sellOrder)
+	}
 }
 
 func (me *MatchingEngine) orderBuy(order *Order) {
@@ -252,7 +277,7 @@ func (me *MatchingEngine) orderBuy(order *Order) {
 				SellID: bestOrder.ID,
 				Price:  bestOrder.Price,
 				Qty:    qty,
-				Exec:   int64(len(me.trades) + 1),
+				Exec:   uint64(len(me.trades) + 1),
 			})
 		}
 	}
@@ -305,7 +330,7 @@ func (me *MatchingEngine) orderSell(order *Order) {
 				SellID: order.ID,
 				Price:  bestOrder.Price,
 				Qty:    qty,
-				Exec:   int64(len(me.trades) + 1),
+				Exec:   uint64(len(me.trades) + 1),
 			})
 		}
 	}
@@ -319,7 +344,7 @@ func (me *MatchingEngine) orderSell(order *Order) {
 	}
 }
 
-func loadJSON[T any](filePath string, data *T) (error) {
+func loadJSON[T any](filePath string, data *T) error {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return fmt.Errorf("file %s does not exist", filePath)
 	} else if err != nil {
@@ -328,7 +353,7 @@ func loadJSON[T any](filePath string, data *T) (error) {
 
 	buf, err := os.ReadFile(filePath)
 	if err != nil {
-		return  fmt.Errorf("error reading file %s: %v", filePath, err)
+		return fmt.Errorf("error reading file %s: %v", filePath, err)
 	}
 
 	err = json.Unmarshal(buf, data)
