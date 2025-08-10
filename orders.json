@@ -1,0 +1,6 @@
+[
+  {"cmd":"NEW","id":"O-1","side":"BUY","type":"LIMIT","price":65000,"qty":0.5},
+  {"cmd":"NEW","id":"O-2","side":"SELL","type":"LIMIT","price":65500,"qty":0.3},
+  {"cmd":"NEW","id":"O-3","side":"SELL","type":"MARKET","qty":0.2},
+  {"cmd":"CANCEL","id":"O-2"}
+]

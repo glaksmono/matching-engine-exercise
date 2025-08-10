@@ -25,8 +25,8 @@ const (
 type Order struct {
 	Cmd        string          `json:"cmd"`
 	ID         string          `json:"id"`
-	Side       *string         `json:"side"`
-	Type       *string         `json:"type"`
+	Side       string          `json:"side"`
+	Type       string          `json:"type"`
 	Price      int             `json:"price"`
 	Qty        decimal.Decimal `json:"qty"`
 	InitialQty decimal.Decimal `json:"-"`
@@ -35,11 +35,11 @@ type Order struct {
 }
 
 func (o Order) IsMarketType() bool {
-	return *o.Type == OrderTypeMarket
+	return o.Type == OrderTypeMarket
 }
 
 func (o Order) IsLimitType() bool {
-	return *o.Type == OrderTypeLimit
+	return o.Type == OrderTypeLimit
 }
 
 type Trade struct {
@@ -123,12 +123,29 @@ func (h *SellOrders) Pop() interface{} {
 	return order
 }
 
-var buyOrders = &BuyOrders{}
-var sellOrders = &SellOrders{}
-var orderMap = make(map[string]*Order)
-var sequenceCounter int = 0
+type Result struct {
+	Trades    []Trade   `json:"trades"`
+	OrderBook OrderBook `json:"orderBook"`
+}
 
-var trades = make([]Trade, 0)
+type MatchingEngine struct {
+	trades     []Trade
+	buyOrders  *BuyOrders
+	sellOrders *SellOrders
+	sequence   int
+	orderMap   map[string]*Order
+}
+
+func (me *MatchingEngine) Init() {
+	me.trades = make([]Trade, 0)
+	me.buyOrders = &BuyOrders{}
+	me.sellOrders = &SellOrders{}
+	me.orderMap = make(map[string]*Order)
+	me.sequence = 0
+
+	heap.Init(me.buyOrders)
+	heap.Init(me.sellOrders)
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -137,64 +154,32 @@ func main() {
 	}
 
 	file := os.Args[1]
-	orders, err := loadJSON(file)
+	orders := []Order{}
+
+	err := loadJSON(file, &orders)
 	if err != nil {
 		fmt.Printf("error loading JSON from file %s: %v\n", file, err)
 	}
 
-
-	trades = []Trade{}
-
-	heap.Init(buyOrders)
-	heap.Init(sellOrders)
+	engine := &MatchingEngine{}
+	engine.Init()
 
 	for _, order := range orders {
 		switch order.Cmd {
 		case OrderCommandNew:
-			commandNew(&order)
+			engine.commandNew(&order)
 		case OrderCommandCancel:
-			commandCancel(&order)
+			engine.commandCancel(&order)
 		default:
 			fmt.Printf("Unknown command: %s\n", order.Cmd)
 		}
 	}
 
-	orderBook := OrderBook{
-		Bids: []OrderBookData{},
-		Asks: []OrderBookData{},
-	}
-	for buyOrders.Len() > 0 {
-		o := heap.Pop(buyOrders).(*Order)
-		if o.Qty.Sign() > 0 && !o.Canceled {
-
-						orderBook.Bids = append(orderBook.Bids, OrderBookData{
-				ID:    o.ID,
-				Price: o.Price,
-				Qty:   o.Qty,
-			})
-		}
-	}
-	for sellOrders.Len() > 0 {
-		o := heap.Pop(sellOrders).(*Order)
-		if o.Qty.Sign() > 0 && !o.Canceled {
-			orderBook.Asks = append(orderBook.Asks, OrderBookData{
-				ID:    o.ID,
-				Price: o.Price,
-				Qty:   o.Qty,
-			})
-		}
-	}
-
-	finalOutput := struct {
-		Trades    []Trade   `json:"trades"`
-		OrderBook OrderBook `json:"orderBook"`
-	}{
-		Trades:    trades,
-		OrderBook: orderBook,
-	}
+	result := engine.processOutput()
 
 	var buf []byte
-	buf, err = json.MarshalIndent(finalOutput, "", " ")
+
+	buf, err = json.MarshalIndent(result, "", " ")
 	if err != nil {
 		fmt.Printf("Error marshaling JSON: %v\n", err)
 		os.Exit(1)
@@ -203,102 +188,93 @@ func main() {
 	fmt.Printf("%s\n", string(buf))
 }
 
-func commandNew(order *Order) {
-	sequenceCounter++
+func (me *MatchingEngine) commandNew(order *Order) {
+	me.sequence++
 	order.InitialQty = order.Qty.Copy()
-	order.SequenceID = sequenceCounter
+	order.SequenceID = me.sequence
 
-	switch *order.Side {
+	switch order.Side {
 	case OrderSideBuy:
-		orderBuy(order)
+		me.orderBuy(order)
 	case OrderSideSell:
-		orderSell(order)
+		me.orderSell(order)
 	default:
-		fmt.Printf("Unknown side: %s\n", *order.Side)
+		fmt.Printf("Unknown side: %s\n", order.Side)
 		return
 	}
 }
 
-func commandCancel(order *Order) {
-	o, _ := orderMap[order.ID]
-	if o == nil {
+func (me *MatchingEngine) commandCancel(order *Order) {
+	o, isExist := me.orderMap[order.ID]
+	if !isExist {
 		return
 	}
+
 	o.Canceled = true
-
-	// for idx := range waitingSellOrders {
-	// 	if waitingSellOrders[idx].ID == order.ID && waitingSellOrders[idx].Qty != decimal.Zero && !waitingSellOrders[idx].Canceled {
-	// 		waitingSellOrders[idx].Canceled = true
-	// 		return
-	// 	}
-	// }
-
-	// for idx := range waitingBuyOrders {
-	// 	if waitingBuyOrders[idx].ID == order.ID && waitingBuyOrders[idx].Qty != decimal.Zero && !waitingBuyOrders[idx].Canceled {
-	//
-	// 		waitingBuyOrders[idx].Canceled = true
-	// 		return
-	// 	}
-	// }
 }
 
-func orderBuy(order *Order) {
+func (me *MatchingEngine) orderBuy(order *Order) {
 	reqQty := order.Qty
 
-	for sellOrders.Len() > 0 && reqQty.Cmp(decimal.Zero) > 0 {
-		sellOrder := sellOrders.GetByIndex(0)
+	for me.sellOrders.Len() > 0 && reqQty.Cmp(decimal.Zero) > 0 {
+		bestOrder := me.sellOrders.GetByIndex(0)
 
-		if sellOrder.Canceled {
-			heap.Pop(sellOrders)
+		if bestOrder.Canceled {
+			heap.Pop(me.sellOrders)
+
 			continue
 		}
 
-		canMatch := order.IsMarketType() || sellOrder.Price <= order.Price
+		canMatch := order.IsMarketType() || bestOrder.Price <= order.Price
 
 		if !canMatch {
 			break
 		}
 
 		var qty decimal.Decimal
-		if sellOrder.Qty.Cmp(reqQty) > 0 {
+		if bestOrder.Qty.Cmp(reqQty) > 0 {
 			qty = reqQty
-			sellOrder.Qty = sellOrder.Qty.Sub(reqQty)
+			bestOrder.Qty = bestOrder.Qty.Sub(reqQty)
 		} else {
-			qty = sellOrder.Qty
-			sellOrder.Qty = decimal.Zero
+			qty = bestOrder.Qty
+			bestOrder.Qty = decimal.Zero
 
-			heap.Pop(sellOrders)
-			delete(orderMap, sellOrder.ID)
+			heap.Pop(me.sellOrders)
+
+			delete(me.orderMap, bestOrder.ID)
 		}
 
-				reqQty = reqQty.Sub(qty)
+		reqQty = reqQty.Sub(qty)
 
 		if qty.Sign() > 0 {
-			trades = append(trades, Trade{
+			me.trades = append(me.trades, Trade{
 				BuyID:  order.ID,
-				SellID: sellOrder.ID,
-				Price:  sellOrder.Price,
+				SellID: bestOrder.ID,
+				Price:  bestOrder.Price,
 				Qty:    qty,
-				Exec:   int64(len(trades) + 1),
+				Exec:   int64(len(me.trades) + 1),
 			})
 		}
 	}
 
 	if reqQty.Sign() > 0 && order.IsLimitType() {
 		order.Qty = reqQty
-		orderMap[order.ID] = order
-		heap.Push(buyOrders, order)
+
+		me.orderMap[order.ID] = order
+
+		heap.Push(me.buyOrders, order)
 	}
 }
 
-func orderSell(order *Order) {
+func (me *MatchingEngine) orderSell(order *Order) {
 	reqQty := order.Qty
 
-	for buyOrders.Len() > 0 && reqQty.Cmp(decimal.Zero) > 0 {
-		bestOrder := buyOrders.GetByIndex(0)
+	for me.buyOrders.Len() > 0 && reqQty.Cmp(decimal.Zero) > 0 {
+		bestOrder := me.buyOrders.GetByIndex(0)
 
 		if bestOrder.Canceled {
-			heap.Pop(buyOrders)
+			heap.Pop(me.buyOrders)
+
 			continue
 		}
 
@@ -316,48 +292,86 @@ func orderSell(order *Order) {
 			qty = bestOrder.Qty
 			bestOrder.Qty = decimal.Zero
 
-			heap.Pop(buyOrders)
-			delete(orderMap, bestOrder.ID)
+			heap.Pop(me.buyOrders)
+
+			delete(me.orderMap, bestOrder.ID)
 		}
 
-				reqQty = reqQty.Sub(qty)
+		reqQty = reqQty.Sub(qty)
 
 		if qty.Sign() > 0 {
-			trades = append(trades, Trade{
+			me.trades = append(me.trades, Trade{
 				BuyID:  bestOrder.ID,
 				SellID: order.ID,
 				Price:  bestOrder.Price,
 				Qty:    qty,
-				Exec:   int64(len(trades) + 1),
+				Exec:   int64(len(me.trades) + 1),
 			})
 		}
 	}
 
-	if reqQty.Sign() > 0 && *order.Type == OrderTypeLimit {
+	if reqQty.Sign() > 0 && order.Type == OrderTypeLimit {
 		order.Qty = reqQty
-		orderMap[order.ID] = order
-		heap.Push(sellOrders, order)
+
+		me.orderMap[order.ID] = order
+
+		heap.Push(me.sellOrders, order)
 	}
 }
 
-func loadJSON(filePath string) ([]Order, error) {
+func loadJSON[T any](filePath string, data *T) (error) {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("file %s does not exist", filePath)
+		return fmt.Errorf("file %s does not exist", filePath)
 	} else if err != nil {
-		return nil, fmt.Errorf("error reading file %s: %v", filePath, err)
+		return fmt.Errorf("error reading file %s: %v", filePath, err)
 	}
 
 	buf, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading file %s: %v", filePath, err)
+		return  fmt.Errorf("error reading file %s: %v", filePath, err)
 	}
 
-	dataTradeJSON := []Order{}
-
-	err = json.Unmarshal(buf, &dataTradeJSON)
+	err = json.Unmarshal(buf, data)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling JSON from file %s: %v", filePath, err)
+		return fmt.Errorf("error unmarshalling JSON from file %s: %v", filePath, err)
 	}
 
-	return dataTradeJSON, nil
+	return nil
+}
+
+func (me *MatchingEngine) processOutput() Result {
+	orderBook := OrderBook{
+		Bids: []OrderBookData{},
+		Asks: []OrderBookData{},
+	}
+
+	for me.buyOrders.Len() > 0 {
+		o := heap.Pop(me.buyOrders).(*Order)
+
+		if o.Qty.Sign() > 0 && !o.Canceled {
+			orderBook.Bids = append(orderBook.Bids, OrderBookData{
+				ID:    o.ID,
+				Price: o.Price,
+				Qty:   o.Qty,
+			})
+		}
+	}
+	for me.sellOrders.Len() > 0 {
+		o := heap.Pop(me.sellOrders).(*Order)
+
+		if o.Qty.Sign() > 0 && !o.Canceled {
+			orderBook.Asks = append(orderBook.Asks, OrderBookData{
+				ID:    o.ID,
+				Price: o.Price,
+				Qty:   o.Qty,
+			})
+		}
+	}
+
+	finalOutput := Result{
+		Trades:    me.trades,
+		OrderBook: orderBook,
+	}
+
+	return finalOutput
 }
