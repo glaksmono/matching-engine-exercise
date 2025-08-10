@@ -47,7 +47,7 @@ type Trade struct {
 	SellID string          `json:"sellId"`
 	Price  int             `json:"price"`
 	Qty    decimal.Decimal `json:"qty"`
-	Exec   int64           `json:"execId"`
+	Exec   uint64           `json:"execId"`
 }
 
 type OrderBookData struct {
