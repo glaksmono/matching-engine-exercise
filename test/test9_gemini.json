@@ -1,0 +1,21 @@
+[
+  {"cmd":"NEW","id":"B1","side":"BUY","type":"LIMIT","price":100,"qty":10},
+  {"cmd":"NEW","id":"S1","side":"SELL","type":"LIMIT","price":110,"qty":10},
+  {"cmd":"REPLACE","id":"B2","price":100,"qty":10},
+  {"cmd":"REPLACE","id":"B1","price":105,"qty":12},
+  {"cmd":"REPLACE","id":"S1","price":108,"qty":8},
+  {"cmd":"NEW","id":"S2","side":"SELL","type":"MARKET","qty":5},
+  {"cmd":"NEW","id":"B3","side":"BUY","type":"MARKET","qty":4},
+  {"cmd":"REPLACE","id":"B1","price":102,"qty":5},
+  {"cmd":"REPLACE","id":"S1","price":112,"qty":6},
+  {"cmd":"NEW","id":"B4","side":"BUY","type":"LIMIT","price":101,"qty":3},
+  {"cmd":"NEW","id":"S3","side":"SELL","type":"LIMIT","price":115,"qty":3},
+  {"cmd":"NEW","id":"S4","side":"SELL","type":"MARKET","qty":6},
+  {"cmd":"NEW","id":"B5","side":"BUY","type":"MARKET","qty":7},
+  {"cmd":"NEW","id":"B6","side":"BUY","type":"LIMIT","price":98,"qty":5},
+  {"cmd":"NEW","id":"S5","side":"SELL","type":"LIMIT","price":118,"qty":5},
+  {"cmd":"REPLACE","id":"B6","price":99,"qty":6},
+  {"cmd":"REPLACE","id":"S5","price":117,"qty":4},
+  {"cmd":"NEW","id":"S6","side":"SELL","type":"MARKET","qty":2},
+  {"cmd":"NEW","id":"B7","side":"BUY","type":"MARKET","qty":2}
+]
