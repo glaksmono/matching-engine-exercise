@@ -28,7 +28,7 @@ type Order struct {
 	ID         string          `json:"id"`
 	Side       string          `json:"side"`
 	Type       string          `json:"type"`
-	Price      int             `json:"price"`
+	Price      decimal.Decimal `json:"price"`
 	Qty        decimal.Decimal `json:"qty"`
 	SequenceID int             `json:"-"`
 	Canceled   bool            `json:"-"`
@@ -45,14 +45,14 @@ func (o Order) IsLimitType() bool {
 type Trade struct {
 	BuyID  string          `json:"buyId"`
 	SellID string          `json:"sellId"`
-	Price  int             `json:"price"`
+	Price  decimal.Decimal `json:"price"`
 	Qty    decimal.Decimal `json:"qty"`
 	Exec   uint64          `json:"execId"`
 }
 
 type OrderBookData struct {
 	ID    string          `json:"id"`
-	Price int             `json:"price"`
+	Price decimal.Decimal `json:"price"`
 	Qty   decimal.Decimal `json:"qty"`
 }
 
@@ -65,11 +65,11 @@ type BuyOrders []*Order
 
 func (h BuyOrders) Len() int { return len(h) }
 func (h BuyOrders) Less(i, j int) bool {
-	if h[i].Price > h[j].Price {
+	if h[i].Price.GreaterThan(h[j].Price) {
 		return true
 	}
 
-	if h[i].Price == h[j].Price {
+	if h[i].Price.Equal(h[j].Price) {
 		return h[i].SequenceID < h[j].SequenceID
 	}
 
@@ -94,11 +94,11 @@ type SellOrders []*Order
 
 func (h SellOrders) Len() int { return len(h) }
 func (h SellOrders) Less(i, j int) bool {
-	if h[i].Price < h[j].Price {
+	if h[i].Price.LessThan(h[j].Price) {
 		return true
 	}
 
-	if h[i].Price == h[j].Price {
+	if h[i].Price.Equal(h[j].Price) {
 		return h[i].SequenceID < h[j].SequenceID
 	}
 
@@ -250,7 +250,7 @@ func (me *MatchingEngine) orderBuy(order *Order) {
 			continue
 		}
 
-		canMatch := order.IsMarketType() || bestOrder.Price <= order.Price
+		canMatch := order.IsMarketType() || bestOrder.Price.LessThanOrEqual(order.Price)
 
 		if !canMatch {
 			break
@@ -303,7 +303,7 @@ func (me *MatchingEngine) orderSell(order *Order) {
 			continue
 		}
 
-		canMatch := order.IsMarketType() || bestOrder.Price >= order.Price
+		canMatch := order.IsMarketType() || bestOrder.Price.GreaterThanOrEqual(order.Price)
 
 		if !canMatch {
 			break

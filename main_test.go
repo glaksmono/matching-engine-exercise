@@ -23,8 +23,8 @@ func TestSimpleMatch(t *testing.T) {
 	engine.Init()
 
 	orders := []Order{
-		{Cmd: "NEW", ID: "B1", Side: OrderSideBuy, Type: OrderTypeLimit, Price: 100, Qty: decimal.NewFromInt(10)},
-		{Cmd: "NEW", ID: "S1", Side: OrderSideSell, Type: OrderTypeLimit, Price: 100, Qty: decimal.NewFromInt(10)},
+		{Cmd: "NEW", ID: "B1", Side: OrderSideBuy, Type: OrderTypeLimit, Price: decimal.NewFromUint64(100), Qty: decimal.NewFromInt(10)},
+		{Cmd: "NEW", ID: "S1", Side: OrderSideSell, Type: OrderTypeLimit, Price: decimal.NewFromUint64(100), Qty: decimal.NewFromInt(10)},
 	}
 
 	for _, order := range orders {
@@ -44,7 +44,7 @@ func TestSimpleMatch(t *testing.T) {
 
 	eq := cmp.Equal(result, Result{
 		Trades: []Trade{
-			{BuyID: "B1", SellID: "S1", Price: 100, Qty: decimal.NewFromInt(10), Exec: 1},
+			{BuyID: "B1", SellID: "S1", Price: decimal.NewFromUint64(100), Qty: decimal.NewFromInt(10), Exec: 1},
 		},
 		OrderBook: OrderBook{
 			Bids: []OrderBookData{},
