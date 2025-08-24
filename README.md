@@ -1,7 +1,7 @@
 # Bursa Crypto Indonesia – Coding Exercise  
 **Build a Minimal Crypto-Exchange Matching Engine**
 
-Welcome to the open-source interview exercise repository for **ICE (Exchange)**, **CACI (Clearing)**, and **ICC (Custodian)**.  
+Welcome to the open-source interview exercise repository for **Exchange**, **Clearing**, and **Custodian**.  
 Your task is to design and implement the *smallest possible* **matching engine** that still behaves correctly and is production-quality.
 
 ---
